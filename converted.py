@@ -16,6 +16,8 @@ from io import BytesIO
 import html
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 import unicodedata
+import asyncio
+from typing import List
 # ─── Load API Keys ───
 load_dotenv()
 API_KEY = os.getenv("PINECONE_API_KEY")
@@ -53,7 +55,7 @@ def clean_chunk(chunk: str) -> str:
 llm = LLM(model="gemini/gemini-1.5-flash", api_key=GOOGLE_API_KEY)
 
 
-def generate_agent_response(user_query: str, context_chunks: List[str]) -> str:
+async def generate_agent_response(user_query: str, context_chunks: List[str]) -> str:
     cleaned_chunks = [clean_chunk(chunk)
                       for chunk in context_chunks if chunk.strip()]
     context = "\n\n".join(cleaned_chunks[:10])
@@ -114,17 +116,17 @@ Your output should be informative, clear, and directly related to the user's que
         agents=[agent],
         tasks=[task],
         verbose=True,
-        history=True,
-        memory=True,
         llm=llm,
     )
-
-    result = crew.kickoff()  # synchronous call (or use await kickoff_async() if needed)
-    return result
-
+    response = await asyncio.create_task(crew.kickoff_async())
+    # result = crew.kickoff()  # synchronous call (or use await kickoff_async() if needed)
+    return response
 
 # ─── App Config ───
-app = FastAPI()
+app = FastAPI(docs_url=None,        # disables Swagger UI at /docs
+              redoc_url=None,       # disables ReDoc at /redoc
+              openapi_url=None      # disables OpenAPI JSON at /openapi.json
+              )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Adjust for production
@@ -132,7 +134,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 # ─── Models ───
 
 
