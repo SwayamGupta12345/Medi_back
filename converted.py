@@ -469,7 +469,7 @@ async def query_pdf(req: QueryRequest):
 
     for book, chunks in book_chunks.items():
         print(f"Processing book: {book} with {len(chunks)} chunks")
-        agent_output = generate_agent_response(req.question, chunks)
+        agent_output = await generate_agent_response(req.question, chunks)
         avg_score = sum(book_scores[book]) / len(book_scores[book])
         book_responses.append({
             "book": book,
@@ -551,7 +551,7 @@ async def query_pdf_with_filter(req: QueryMeRequest):
         book_responses.append({
             "book": book,
             "score": round(avg_score, 3),
-            "text": str(agent_output.raw)
+            "text": str(agent_output) # Ensure this is the agent's response
         })
 
     return JSONResponse(content={"results": book_responses}, status_code=200)
