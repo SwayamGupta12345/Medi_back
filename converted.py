@@ -624,3 +624,6 @@ async def query_pdf_with_filter(req: QueryMeRequest):
 @app.get("/")
 def hello():
     return {"message": "Hello, this is the PDF Query API!"}
+@app.head("/")
+def head_root():
+    return 200
