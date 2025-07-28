@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -626,4 +626,4 @@ def hello():
     return {"message": "Hello, this is the PDF Query API!"}
 @app.head("/")
 def head_root():
-    return 200
+    return Response(status_code=200)
