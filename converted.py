@@ -403,14 +403,14 @@ def retrieve_query_results(user_query: str):
     print("Keywords extracted:", keywords)
     results = index.query(
         vector=query_vector,
-        top_k=25,
+        top_k=100,
         namespace="example-namespace",
         include_metadata=True,
         # optional keyword filtering
         filter={"keywords": {"$in": keywords}}
     )
     print("Query executed")
-    print("Query results:", results)
+    print("Raw query results:", results)
 
     # return results['matches']
     if all('keywords' in match.get('metadata', {}) for match in results.get('matches', [])):
@@ -439,7 +439,7 @@ def retrieve_query_results_me(user_query: str, book_names: List[str]):
 
     results = index.query(
         vector=query_vector,
-        top_k=25,
+        top_k=45,
         namespace="example-namespace",
         include_metadata=True,
         filter=filter_condition
