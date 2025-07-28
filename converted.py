@@ -55,29 +55,92 @@ def clean_chunk(chunk: str) -> str:
 llm = LLM(model="gemini/gemini-1.5-flash", api_key=GOOGLE_API_KEY)
 
 
+# async def generate_agent_response(user_query: str, context_chunks: List[str]) -> str:
+#     cleaned_chunks = [clean_chunk(chunk)
+#                       for chunk in context_chunks if chunk.strip()]
+#     context = "\n\n".join(cleaned_chunks[:10])
+
+#     # Define Agent
+#     agent = Agent(
+#         name="PDF Intelligence Analyst",
+#         role="Advanced PDF Content Interpreter",
+#         goal=(
+#             "To assist users by accurately analyzing and extracting relevant insights from academic or medical PDFs. "
+#             "The agent ensures that every answer is grounded in the provided context, delivering clarity, factual accuracy, and relevance."
+#         ),
+#         backstory=(
+#             "You are a highly capable AI specialized in interpreting structured and unstructured data from PDF documents, "
+#             "particularly academic research, scientific papers, and medical literature. You are trained to locate and summarize "
+#             "the most relevant information, avoiding speculation or unsupported conclusions. "
+#             "Your responses are grounded in the content and avoid hallucination. "
+#             "You are helpful, logical, and precise. If the content is ambiguous, irrelevant, or insufficient, you must acknowledge that clearly. "
+#             "You are also capable of handling follow-up questions, drawing from prior context only when explicitly reloaded. "
+#             "You always respond concisely in 5–10 well-structured sentences, using bullet points if clarity can be improved. "
+#             "You do not include any personal opinions or assumptions. "
+#             "When appropriate, you refer directly to facts or sections of the PDF, without quoting excessively."
+#         ),
+#         llm=llm,
+#         verbose=True,
+#     )
+
+#     # Define Task
+#     task = Task(
+#         description=f"""
+# Context:
+# ---------
+# {context}
+
+# Question:
+# ---------
+# {user_query}
+
+# Instructions:
+# -------------
+# - Read the question carefully and locate the most relevant section in the context.
+# - Do **not** fabricate or assume any information not present in the context.
+# - If you **cannot** find a sufficient answer based on the context, respond with:
+#   `"The provided document does not contain enough information to answer this question accurately."`
+# - When answering, prefer clear and concise language (5–10 well-structured sentences).
+# - Where helpful, use numbered points or short bullet lists to improve readability.
+# - Do not quote large blocks from the PDF—summarize meaningfully instead.
+# - Focus on factual precision, especially when answering technical or scientific queries.
+
+# Your output should be informative, clear, and directly related to the user's query.
+#         """,
+#         expected_output="An informative, concise response (5–10 sentences), grounded in the context. No assumptions or hallucinations.",
+#         agent=agent,
+#     )
+
+#     # Run with Crew
+#     crew = Crew(
+#         agents=[agent],
+#         tasks=[task],
+#         verbose=True,
+#         llm=llm,
+#     )
+#     response = await asyncio.create_task(crew.kickoff_async())
+#     # result = crew.kickoff()  # synchronous call (or use await kickoff_async() if needed)
+#     return response
 async def generate_agent_response(user_query: str, context_chunks: List[str]) -> str:
     cleaned_chunks = [clean_chunk(chunk)
                       for chunk in context_chunks if chunk.strip()]
-    context = "\n\n".join(cleaned_chunks[:10])
+    context = "\n\n".join(cleaned_chunks[:20])  # Increased from 10 to 20 for richer context
 
     # Define Agent
     agent = Agent(
         name="PDF Intelligence Analyst",
         role="Advanced PDF Content Interpreter",
         goal=(
-            "To assist users by accurately analyzing and extracting relevant insights from academic or medical PDFs. "
-            "The agent ensures that every answer is grounded in the provided context, delivering clarity, factual accuracy, and relevance."
+            "To extract, synthesize, and present comprehensive insights from academic or medical PDFs. "
+            "Every answer must be grounded in the provided context, prioritizing clarity, depth, and factual accuracy."
         ),
         backstory=(
-            "You are a highly capable AI specialized in interpreting structured and unstructured data from PDF documents, "
-            "particularly academic research, scientific papers, and medical literature. You are trained to locate and summarize "
-            "the most relevant information, avoiding speculation or unsupported conclusions. "
-            "Your responses are grounded in the content and avoid hallucination. "
-            "You are helpful, logical, and precise. If the content is ambiguous, irrelevant, or insufficient, you must acknowledge that clearly. "
-            "You are also capable of handling follow-up questions, drawing from prior context only when explicitly reloaded. "
-            "You always respond concisely in 5–10 well-structured sentences, using bullet points if clarity can be improved. "
-            "You do not include any personal opinions or assumptions. "
-            "When appropriate, you refer directly to facts or sections of the PDF, without quoting excessively."
+            "You are a highly capable AI trained to interpret complex academic and medical literature. "
+            "Your expertise lies in reading structured/unstructured content, understanding nuances, and delivering insightful, well-structured summaries. "
+            "You never hallucinate or speculate. You are analytical, concise, and context-driven. "
+            "You can handle difficult follow-up questions and clarify when data is insufficient. "
+            "When clarity can be improved, use bullet points or numbered structures. "
+            "You respond in 8–15 well-structured sentences or fewer if the answer is simple, and you avoid unnecessary repetition or filler."
         ),
         llm=llm,
         verbose=True,
@@ -96,18 +159,20 @@ Question:
 
 Instructions:
 -------------
-- Read the question carefully and locate the most relevant section in the context.
-- Do **not** fabricate or assume any information not present in the context.
-- If you **cannot** find a sufficient answer based on the context, respond with:
+- Analyze the context and locate the **most relevant** information.
+- Do **not** guess, fabricate, or include unsupported claims.
+- If there's **not enough context**, respond with:
   `"The provided document does not contain enough information to answer this question accurately."`
-- When answering, prefer clear and concise language (5–10 well-structured sentences).
-- Where helpful, use numbered points or short bullet lists to improve readability.
-- Do not quote large blocks from the PDF—summarize meaningfully instead.
-- Focus on factual precision, especially when answering technical or scientific queries.
+- Provide a **comprehensive and logically structured answer**:
+  - Prefer 8–15 well-formed sentences (unless answer is short by nature).
+  - Use **bullet points or numbered steps** for technical clarity.
+  - Reference specific sections or data patterns *only when helpful*.
+- Avoid quoting large chunks — paraphrase meaningfully and precisely.
+- Be informative, clear, technical when required, and avoid personal tone or assumptions.
 
-Your output should be informative, clear, and directly related to the user's query.
+Respond as a domain expert—confident, precise, and insightful.
         """,
-        expected_output="An informative, concise response (5–10 sentences), grounded in the context. No assumptions or hallucinations.",
+        expected_output="A comprehensive, precise answer grounded in the provided context, ideally 8–15 sentences or structured bullets.",
         agent=agent,
     )
 
@@ -119,7 +184,6 @@ Your output should be informative, clear, and directly related to the user's que
         llm=llm,
     )
     response = await asyncio.create_task(crew.kickoff_async())
-    # result = crew.kickoff()  # synchronous call (or use await kickoff_async() if needed)
     return response
 
 # ─── App Config ───
