@@ -616,7 +616,7 @@ async def query_pdf_with_filter(req: QueryMeRequest):
         book_responses.append({
             "book": book,
             "score": round(avg_score, 3),
-            "text": str(agent_output) # Ensure this is the agent's response
+            "text": str(agent_output)  # Ensure this is the agent's response
         })
 
     return JSONResponse(content={"results": book_responses}, status_code=200)
@@ -625,6 +625,8 @@ async def query_pdf_with_filter(req: QueryMeRequest):
 @app.get("/")
 def hello():
     return {"message": "Hello, this is the PDF Query API!"}
+
+
 @app.head("/")
 def head_root():
     return Response(status_code=200)
