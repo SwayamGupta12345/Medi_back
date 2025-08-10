@@ -124,7 +124,8 @@ llm = LLM(model="gemini/gemini-1.5-flash", api_key=GOOGLE_API_KEY)
 async def generate_agent_response(user_query: str, context_chunks: List[str]) -> str:
     cleaned_chunks = [clean_chunk(chunk)
                       for chunk in context_chunks if chunk.strip()]
-    context = "\n\n".join(cleaned_chunks[:20])  # Increased from 10 to 20 for richer context
+    # Increased from 10 to 20 for richer context
+    context = "\n\n".join(cleaned_chunks[:20])
 
     # Define Agent
     agent = Agent(
