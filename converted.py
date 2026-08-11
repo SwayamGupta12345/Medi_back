@@ -34,10 +34,19 @@ if not pc.has_index(index_name):
         spec={"serverless": {"cloud": "aws", "region": "us-east-1"}}
     )
 index = pc.Index(index_name)
-embed_model = GoogleGenerativeAIEmbeddings(
-    model="models/embedding-001", google_api_key=GOOGLE_API_KEY
-)
+# embed_model = GoogleGenerativeAIEmbeddings(
+#     model="models/embedding-001", google_api_key=GOOGLE_API_KEY
+# )
 
+embed_model = GoogleGenerativeAIEmbeddings(
+    model="models/gemini-embedding-001",
+    google_api_key=GOOGLE_API_KEY
+)
+print(
+    "Embedding dimension:",
+    len(embed_model.embed_query("test")),
+    flush=True
+)
 
 def clean_chunk(chunk: str) -> str:
     # Filter out common junk patterns
