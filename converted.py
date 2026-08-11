@@ -810,7 +810,7 @@ import html
 import unicodedata
 import pymupdf
 from dotenv import load_dotenv
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from crewai import Agent, Task, Crew, LLM
 from pinecone import Pinecone
