@@ -25,14 +25,30 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # ─── Init Pinecone ───
 pc = Pinecone(api_key=API_KEY)
-index_name = "quickstart-py1"
+# index_name = "quickstart-py1"
+# if not pc.has_index(index_name):
+#     pc.create_index(
+#         name=index_name,
+#         dimension=768,
+#         metric="cosine",
+#         spec={"serverless": {"cloud": "aws", "region": "us-east-1"}}
+#     )
+# index = pc.Index(index_name)
+index_name = "medical-pdf-rag"
+
 if not pc.has_index(index_name):
     pc.create_index(
         name=index_name,
-        dimension=768,
+        dimension=3072,
         metric="cosine",
-        spec={"serverless": {"cloud": "aws", "region": "us-east-1"}}
+        spec={
+            "serverless": {
+                "cloud": "aws",
+                "region": "us-east-1"
+            }
+        }
     )
+
 index = pc.Index(index_name)
 # embed_model = GoogleGenerativeAIEmbeddings(
 #     model="models/embedding-001", google_api_key=GOOGLE_API_KEY
