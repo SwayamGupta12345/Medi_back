@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List
 import os
 import re
-import fitz  # PyMuPDF
+import pymupdf
 from collections import defaultdict
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -194,7 +194,9 @@ app = FastAPI(docs_url=None,        # disables Swagger UI at /docs
               )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production
+    allow_origins=[
+        "https://medical-pdf-reader.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
