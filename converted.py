@@ -194,10 +194,8 @@ app = FastAPI(docs_url=None,        # disables Swagger UI at /docs
               )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://medical-pdf-reader.vercel.app"
-    ],
-    allow_credentials=True,
+    allow_origins=["https://medical-pdf-reader.vercel.app"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
