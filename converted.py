@@ -395,28 +395,65 @@ def extract_query_keywords(user_query: str) -> List[str]:
     return keywords
 
 
+# def retrieve_query_results(user_query: str):
+#     enhanced_query = enhance_prompt(user_query)
+#     print(enhanced_query)
+#     query_vector = embed_model.embed_query(enhanced_query)
+#     print("Query vector generated")
+#     keywords = extract_query_keywords(enhanced_query)
+#     print("Keywords extracted:", keywords)
+#     results = index.query(
+#         vector=query_vector,
+#         top_k=100,
+#         namespace="example-namespace",
+#         include_metadata=True,
+#         # optional keyword filtering
+#         filter={"keywords": {"$in": keywords}}
+#     )
+#     print("Query executed")
+#     print("Raw query results:", results)
+
+#     # return results['matches']
+#     if all('keywords' in match.get('metadata', {}) for match in results.get('matches', [])):
+#         results['matches'] = hybrid_rerank(results, keywords)
+#     return results['matches']
+
 def retrieve_query_results(user_query: str):
     enhanced_query = enhance_prompt(user_query)
-    print(enhanced_query)
+
+    print("Enhanced query:", enhanced_query)
+
+    # 1. Generate query embedding
     query_vector = embed_model.embed_query(enhanced_query)
+
     print("Query vector generated")
+
+    # 2. Extract lexical keywords
     keywords = extract_query_keywords(enhanced_query)
+
     print("Keywords extracted:", keywords)
+
+    # 3. Retrieve candidates using dense retrieval ONLY
     results = index.query(
         vector=query_vector,
         top_k=100,
         namespace="example-namespace",
-        include_metadata=True,
-        # optional keyword filtering
-        filter={"keywords": {"$in": keywords}}
+        include_metadata=True
     )
-    print("Query executed")
-    print("Raw query results:", results)
 
-    # return results['matches']
-    if all('keywords' in match.get('metadata', {}) for match in results.get('matches', [])):
-        results['matches'] = rerank_by_keyword_overlap(results, keywords)
-    return results['matches']
+    print("Dense retrieval completed")
+    print("Candidates retrieved:", len(results.get("matches", [])))
+
+    # 4. Hybrid reranking
+    matches = hybrid_rerank(
+        results.get("matches", []),
+        keywords,
+        alpha=0.7
+    )
+
+    print("Hybrid reranking completed")
+
+    return matches
 
 
 def retrieve_query_results_me(user_query: str, book_names: List[str]):
@@ -450,22 +487,83 @@ def retrieve_query_results_me(user_query: str, book_names: List[str]):
     print("Query results:", results)
 
     if all('keywords' in match.get('metadata', {}) for match in results.get('matches', [])):
-        results['matches'] = rerank_by_keyword_overlap(results, keywords)
+        results['matches'] = hybrid_rerank(results, keywords)
 
     return results['matches']
 
 
-def rerank_by_keyword_overlap(results, query_keywords):
-    def score(match):
-        chunk_keywords = match.get('metadata', {}).get('keywords', [])
-        return len(set(chunk_keywords) & set(query_keywords))
+# def rerank_by_keyword_overlap(results, query_keywords):
+#     def score(match):
+#         chunk_keywords = match.get('metadata', {}).get('keywords', [])
+#         return len(set(chunk_keywords) & set(query_keywords))
 
-    matches = results.get('matches', [])
-    print("Reranking matches based on keyword overlap")
+#     matches = results.get('matches', [])
+#     print("Reranking matches based on keyword overlap")
+#     if not matches:
+#         return []
+#     return sorted(matches, key=score, reverse=True)
+def calculate_keyword_score(match, query_keywords):
+    """
+    Calculates lexical overlap between query keywords
+    and chunk keywords.
+
+    Returns a normalized score between 0 and 1.
+    """
+    chunk_keywords = match.get("metadata", {}).get("keywords", [])
+
+    query_set = set(query_keywords)
+    chunk_set = set(chunk_keywords)
+
+    if not query_set or not chunk_set:
+        return 0.0
+
+    intersection = query_set & chunk_set
+
+    # Recall-style overlap:
+    # How much of the query's meaningful vocabulary
+    # appears in this chunk?
+    return len(intersection) / len(query_set)
+
+
+def hybrid_rerank(matches, query_keywords, alpha=0.7):
+    """
+    Combines semantic vector similarity with lexical keyword overlap.
+
+    final_score =
+        alpha * vector_similarity
+        + (1-alpha) * keyword_score
+
+    alpha=0.7 means:
+        70% semantic similarity
+        30% keyword relevance
+    """
+
     if not matches:
         return []
-    return sorted(matches, key=score, reverse=True)
 
+    for match in matches:
+        vector_score = float(match.get("score", 0.0))
+
+        keyword_score = calculate_keyword_score(
+            match,
+            query_keywords
+        )
+
+        final_score = (
+            alpha * vector_score
+            + (1 - alpha) * keyword_score
+        )
+
+        match["vector_score"] = round(vector_score, 4)
+        match["keyword_score"] = round(keyword_score, 4)
+        match["hybrid_score"] = round(final_score, 4)
+
+    matches.sort(
+        key=lambda x: x["hybrid_score"],
+        reverse=True
+    )
+
+    return matches
 
 # ─── API Endpoints ───
 
@@ -496,9 +594,18 @@ async def query_pdf(req: QueryRequest):
     # Extract context for AI agent
     # Group chunks by book
     # Normalize scores
-    max_score = max(match["score"] for match in matches) or 1e-6
+    # max_score = max(match["score"] for match in matches) or 1e-6
+    # for match in matches:
+    #     match["norm_score"] = match["score"] / max_score
+    max_score = max(
+        match["hybrid_score"]
+        for match in matches
+    ) or 1e-6
+
     for match in matches:
-        match["norm_score"] = match["score"] / max_score
+        match["norm_score"] = (
+            match["hybrid_score"] / max_score
+        )
 
     # Group by book
     book_chunks = defaultdict(list)
@@ -590,9 +697,18 @@ async def query_pdf_with_filter(req: QueryMeRequest):
     # ]
 
     # Normalize scores
-    max_score = max(match["score"] for match in all_matches) or 1e-6
+    # max_score = max(match["score"] for match in all_matches) or 1e-6
+    # for match in all_matches:
+    #     match["norm_score"] = match["score"] / max_score
+    max_score = max(
+        match["hybrid_score"]
+        for match in all_matches
+    ) or 1e-6
+
     for match in all_matches:
-        match["norm_score"] = match["score"] / max_score
+        match["norm_score"] = (
+            match["hybrid_score"] / max_score
+        )
 
     # Group by book
     book_chunks = defaultdict(list)
