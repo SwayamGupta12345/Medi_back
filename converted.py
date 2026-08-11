@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import List
 import os
 import re
-import pymupdf
+import fitz
 from collections import defaultdict
 from dotenv import load_dotenv
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -485,65 +485,189 @@ async def upload_files(files: List[UploadFile] = File(...)):
 
 # @app.post("/query/", response_model=List[QueryResponse])
 
-
 @app.post("/query/")
 async def query_pdf(req: QueryRequest):
-    matches = retrieve_query_results(req.question)
-    print("Query started")
-    if not matches:
-        return JSONResponse(content={"message": "No data available", "results": []}, status_code=200)
-    print("Query will return results")
-    # Extract context for AI agent
-    # Group chunks by book
-    # Normalize scores
-    max_score = max(match["score"] for match in matches) or 1e-6
-    for match in matches:
-        match["norm_score"] = match["score"] / max_score
+    print("🔥 QUERY ENDPOINT HIT", flush=True)
+    print("🔥 QUESTION:", req.question, flush=True)
 
-    # Group by book
-    book_chunks = defaultdict(list)
-    book_scores = defaultdict(list)
-    print("Grouping chunks by book")
-    for match in matches:
-        book = match["metadata"].get("book_title", "Unknown")
-        chunk = match["metadata"].get("chunk_text", "")
-        if chunk:
-            book_chunks[book].append(chunk)
-            book_scores[book].append(match["norm_score"])
-    print(f"Found {len(book_chunks)} books with matching chunks")
-    # Add AI agent result
-    # responses = [
-    #     QueryResponse(
-    #         book=match["metadata"].get("book_title", "Unknown"),
-    #         score=match["score"],
-    #         text=clean_chunk(match["metadata"].get("chunk_text", ""))
-    #     )
-    #     for match in matches
-    # ]
+    try:
+        print("🔥 Calling retrieve_query_results()", flush=True)
 
-    # Add AI agent result at the beginning
-    # responses.insert(0, QueryResponse(
-    #     book="AI Agent",
-    #     score=1.0,  # you can keep it highest or just use -1 if not used
-    #     text=str(agent_output.raw)
-    # ))
+        matches = retrieve_query_results(req.question)
 
-    # return responses
+        print(
+            f"🔥 Retrieval completed. Matches: {len(matches)}",
+            flush=True
+        )
 
-    book_responses = []
+        if not matches:
+            print("🔥 No matches found", flush=True)
 
-    for book, chunks in book_chunks.items():
-        print(f"Processing book: {book} with {len(chunks)} chunks")
-        agent_output = await generate_agent_response(req.question, chunks)
-        avg_score = sum(book_scores[book]) / len(book_scores[book])
-        book_responses.append({
-            "book": book,
-            # Optional — or compute average match score
-            "score": round(avg_score, 3),
-            "text": str(agent_output.raw)
-        })
+            return JSONResponse(
+                content={
+                    "message": "No data available",
+                    "results": []
+                },
+                status_code=200
+            )
 
-    return JSONResponse(content={"results": book_responses}, status_code=200)
+        print("🔥 Normalizing scores", flush=True)
+
+        max_score = max(
+            match["score"]
+            for match in matches
+        ) or 1e-6
+
+        for match in matches:
+            match["norm_score"] = (
+                match["score"] / max_score
+            )
+
+        # Group chunks by book
+        book_chunks = defaultdict(list)
+        book_scores = defaultdict(list)
+
+        print("🔥 Grouping chunks by book", flush=True)
+
+        for match in matches:
+            metadata = match.get("metadata", {})
+
+            book = metadata.get(
+                "book_title",
+                "Unknown"
+            )
+
+            chunk = metadata.get(
+                "chunk_text",
+                ""
+            )
+
+            if chunk:
+                book_chunks[book].append(chunk)
+                book_scores[book].append(
+                    match["norm_score"]
+                )
+
+        print(
+            f"🔥 Found {len(book_chunks)} books",
+            flush=True
+        )
+
+        book_responses = []
+
+        for book, chunks in book_chunks.items():
+
+            print(
+                f"🔥 Generating answer for: {book}",
+                flush=True
+            )
+
+            agent_output = await generate_agent_response(
+                req.question,
+                chunks
+            )
+
+            avg_score = (
+                sum(book_scores[book])
+                / len(book_scores[book])
+            )
+
+            book_responses.append({
+                "book": book,
+                "score": round(avg_score, 3),
+                "text": str(agent_output.raw)
+            })
+
+        print("🔥 QUERY SUCCESS", flush=True)
+
+        return JSONResponse(
+            content={
+                "results": book_responses
+            },
+            status_code=200
+        )
+
+    except Exception as e:
+
+        import traceback
+
+        print("🔥🔥🔥 QUERY FAILED 🔥🔥🔥", flush=True)
+        print(
+            f"ERROR TYPE: {type(e).__name__}",
+            flush=True
+        )
+        print(
+            f"ERROR: {str(e)}",
+            flush=True
+        )
+
+        traceback.print_exc()
+
+        return JSONResponse(
+            content={
+                "error": str(e),
+                "error_type": type(e).__name__
+            },
+            status_code=500
+        )
+# @app.post("/query/")
+# async def query_pdf(req: QueryRequest):
+#     matches = retrieve_query_results(req.question)
+#     print("Query started")
+#     if not matches:
+#         return JSONResponse(content={"message": "No data available", "results": []}, status_code=200)
+#     print("Query will return results")
+#     # Extract context for AI agent
+#     # Group chunks by book
+#     # Normalize scores
+#     max_score = max(match["score"] for match in matches) or 1e-6
+#     for match in matches:
+#         match["norm_score"] = match["score"] / max_score
+
+#     # Group by book
+#     book_chunks = defaultdict(list)
+#     book_scores = defaultdict(list)
+#     print("Grouping chunks by book")
+#     for match in matches:
+#         book = match["metadata"].get("book_title", "Unknown")
+#         chunk = match["metadata"].get("chunk_text", "")
+#         if chunk:
+#             book_chunks[book].append(chunk)
+#             book_scores[book].append(match["norm_score"])
+#     print(f"Found {len(book_chunks)} books with matching chunks")
+#     # Add AI agent result
+#     # responses = [
+#     #     QueryResponse(
+#     #         book=match["metadata"].get("book_title", "Unknown"),
+#     #         score=match["score"],
+#     #         text=clean_chunk(match["metadata"].get("chunk_text", ""))
+#     #     )
+#     #     for match in matches
+#     # ]
+
+#     # Add AI agent result at the beginning
+#     # responses.insert(0, QueryResponse(
+#     #     book="AI Agent",
+#     #     score=1.0,  # you can keep it highest or just use -1 if not used
+#     #     text=str(agent_output.raw)
+#     # ))
+
+#     # return responses
+
+#     book_responses = []
+
+#     for book, chunks in book_chunks.items():
+#         print(f"Processing book: {book} with {len(chunks)} chunks")
+#         agent_output = await generate_agent_response(req.question, chunks)
+#         avg_score = sum(book_scores[book]) / len(book_scores[book])
+#         book_responses.append({
+#             "book": book,
+#             # Optional — or compute average match score
+#             "score": round(avg_score, 3),
+#             "text": str(agent_output.raw)
+#         })
+
+#     return JSONResponse(content={"results": book_responses}, status_code=200)
 
     # return {
     #     # ✅ Only return agent’s summarized paragraphPDF Content Analyzer
