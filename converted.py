@@ -22,6 +22,30 @@
 # load_dotenv()
 # API_KEY = os.getenv("PINECONE_API_KEY")
 # GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+from fastapi import FastAPI, UploadFile, File, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel
+from typing import List
+import os
+import re
+import fitz
+from collections import defaultdict
+from dotenv import load_dotenv
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from crewai import Agent, Task, Crew,  LLM
+from pinecone import Pinecone
+from io import BytesIO
+import html
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
+import unicodedata
+import asyncio
+from typing import List
+# ─── Load API Keys ───
+load_dotenv()
+API_KEY = os.getenv("PINECONE_API_KEY")
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 # # ─── Init Pinecone ───
 # pc = Pinecone(api_key=API_KEY)
