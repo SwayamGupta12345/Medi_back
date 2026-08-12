@@ -22,30 +22,7 @@
 # load_dotenv()
 # API_KEY = os.getenv("PINECONE_API_KEY")
 # GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-from fastapi import FastAPI, UploadFile, File, Response
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
-from typing import List
-import os
-import re
-import fitz
-from collections import defaultdict
-from dotenv import load_dotenv
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from crewai import Agent, Task, Crew,  LLM
-from pinecone import Pinecone
-from io import BytesIO
-import html
-from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
-import unicodedata
-import asyncio
-from typing import List
-# ─── Load API Keys ───
-load_dotenv()
-API_KEY = os.getenv("PINECONE_API_KEY")
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
 
 # # ─── Init Pinecone ───
 # pc = Pinecone(api_key=API_KEY)
@@ -796,7 +773,6 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 #     return Response(status_code=200)
 
 
-
 from fastapi import FastAPI, UploadFile, File, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -815,7 +791,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from crewai import Agent, Task, Crew, LLM
 from pinecone import Pinecone
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
-
+import asyncio
 # ============================================================
 # ENVIRONMENT
 # ============================================================
@@ -897,12 +873,15 @@ app.add_middleware(
 # MODELS
 # ============================================================
 
+
 class QueryRequest(BaseModel):
     question: str
+
 
 class QueryMeRequest(BaseModel):
     question: str
     book_names: List[str]
+
 
 class QueryResponse(BaseModel):
     book: str
@@ -912,6 +891,7 @@ class QueryResponse(BaseModel):
 # ============================================================
 # TEXT CLEANING
 # ============================================================
+
 
 def clean_chunk(chunk: str) -> str:
     noise_patterns = [
@@ -935,6 +915,7 @@ def clean_chunk(chunk: str) -> str:
 # KEYWORDS
 # ============================================================
 
+
 def extract_keywords(text: str) -> List[str]:
     words = re.findall(r"\b\w+\b", text.lower())
 
@@ -947,6 +928,7 @@ def extract_keywords(text: str) -> List[str]:
 # ============================================================
 # WATERMARK DETECTION
 # ============================================================
+
 
 def contains_watermark_keyword(text: str, keywords: List[str]) -> bool:
     return any(
@@ -961,6 +943,7 @@ def contains_watermark_keyword(text: str, keywords: List[str]) -> bool:
 # ============================================================
 # PDF PARSING
 # ============================================================
+
 
 def parse_pdf_file(file_bytes: bytes) -> str:
     watermark_keywords = [
@@ -1017,6 +1000,7 @@ def parse_pdf_file(file_bytes: bytes) -> str:
 # ============================================================
 # PDF TITLE EXTRACTION
 # ============================================================
+
 
 def extract_pdf_title(content: bytes, fallback_filename: str) -> str:
     def is_valid_title(text: str) -> bool:
@@ -1134,6 +1118,7 @@ def extract_pdf_title(content: bytes, fallback_filename: str) -> str:
 # VECTOR ID
 # ============================================================
 
+
 def sanitize_vector_id_title(title: str) -> str:
     ascii_title = (
         unicodedata
@@ -1153,6 +1138,7 @@ def sanitize_vector_id_title(title: str) -> str:
 # ============================================================
 # CHUNK + EMBED
 # ============================================================
+
 
 def chunk_and_embed(text: str, book_title: str, filename: str):
     if not text.strip():
@@ -1201,6 +1187,7 @@ def chunk_and_embed(text: str, book_title: str, filename: str):
 # STORE PDF
 # ============================================================
 
+
 def store_pdf_in_pinecone(
     file_bytes: bytes,
     book_title: str,
@@ -1233,6 +1220,7 @@ def store_pdf_in_pinecone(
 # ============================================================
 # QUERY ENHANCEMENT
 # ============================================================
+
 
 def enhance_prompt(user_query: str) -> str:
     query = user_query.strip()
@@ -1292,12 +1280,14 @@ def enhance_prompt(user_query: str) -> str:
 # QUERY KEYWORDS
 # ============================================================
 
+
 def extract_query_keywords(user_query: str) -> List[str]:
     return extract_keywords(user_query)
 
 # ============================================================
 # HYBRID RETRIEVAL
 # ============================================================
+
 
 def calculate_keyword_score(match, query_keywords):
     chunk_keywords = (
@@ -1316,50 +1306,82 @@ def calculate_keyword_score(match, query_keywords):
 
     return len(intersection) / len(query_set)
 
-def hybrid_rerank(matches, query_keywords, alpha=0.7):
+# def hybrid_rerank(matches, query_keywords, alpha=0.7):
+#     if not matches:
+#         return []
+
+#     for match in matches:
+#         vector_score = float(
+#             match.get("score", 0.0)
+#         )
+
+#         keyword_score = calculate_keyword_score(
+#             match,
+#             query_keywords
+#         )
+
+#         hybrid_score = (
+#             alpha * vector_score
+#             + (1 - alpha) * keyword_score
+#         )
+
+#         match["vector_score"] = round(
+#             vector_score,
+#             4
+#         )
+
+#         match["keyword_score"] = round(
+#             keyword_score,
+#             4
+#         )
+
+#         match["hybrid_score"] = round(
+#             hybrid_score,
+#             4
+#         )
+
+#     matches.sort(
+#         key=lambda x: x["hybrid_score"],
+#         reverse=True
+#     )
+
+#     return matches
+# ============================================================
+# RECIPROCAL RANK FUSION
+# ============================================================
+
+
+def reciprocal_rank_fusion(matches, query_keywords, k_rrf=60):
     if not matches:
         return []
 
-    for match in matches:
-        vector_score = float(
-            match.get("score", 0.0)
-        )
+    # Rank list 1: dense vector score (already sorted by Pinecone, but re-sort to be safe)
+    dense_ranked = sorted(
+        matches, key=lambda m: m.get("score", 0.0), reverse=True)
+    dense_rank = {id(m): rank for rank, m in enumerate(dense_ranked, start=1)}
 
-        keyword_score = calculate_keyword_score(
-            match,
-            query_keywords
-        )
+    # Rank list 2: keyword overlap score (independent signal)
+    def kw_score(m):
+        return calculate_keyword_score(m, query_keywords)
 
-        hybrid_score = (
-            alpha * vector_score
-            + (1 - alpha) * keyword_score
-        )
+    keyword_ranked = sorted(matches, key=kw_score, reverse=True)
+    keyword_rank = {id(m): rank for rank,
+                    m in enumerate(keyword_ranked, start=1)}
 
-        match["vector_score"] = round(
-            vector_score,
-            4
-        )
+    for m in matches:
+        r_dense = dense_rank[id(m)]
+        r_kw = keyword_rank[id(m)]
+        rrf_score = (1.0 / (k_rrf + r_dense)) + (1.0 / (k_rrf + r_kw))
+        m["vector_score"] = round(float(m.get("score", 0.0)), 4)
+        m["keyword_score"] = round(kw_score(m), 4)
+        m["rrf_score"] = round(rrf_score, 6)
 
-        match["keyword_score"] = round(
-            keyword_score,
-            4
-        )
-
-        match["hybrid_score"] = round(
-            hybrid_score,
-            4
-        )
-
-    matches.sort(
-        key=lambda x: x["hybrid_score"],
-        reverse=True
-    )
-
+    matches.sort(key=lambda x: x["rrf_score"], reverse=True)
     return matches
-
 # ============================================================
 # RETRIEVE
 # ============================================================
+
 
 def retrieve_query_results(user_query: str):
     enhanced_query = enhance_prompt(user_query)
@@ -1403,10 +1425,9 @@ def retrieve_query_results(user_query: str):
         len(matches)
     )
 
-    matches = hybrid_rerank(
+    matches = reciprocal_rank_fusion(
         matches,
-        keywords,
-        alpha=0.7
+        keywords
     )
 
     matches = matches[:20]
@@ -1420,7 +1441,7 @@ def retrieve_query_results(user_query: str):
         print(
             "MATCH:",
             match.get("score"),
-            match.get("hybrid_score"),
+            match.get("rrf_score"),
             match.get("metadata", {}).get("book_title")
         )
 
@@ -1429,6 +1450,7 @@ def retrieve_query_results(user_query: str):
 # ============================================================
 # RETRIEVE FROM SPECIFIC BOOKS
 # ============================================================
+
 
 def retrieve_query_results_me(
     user_query: str,
@@ -1481,10 +1503,9 @@ def retrieve_query_results_me(
         len(matches)
     )
 
-    matches = hybrid_rerank(
+    matches = reciprocal_rank_fusion(
         matches,
-        keywords,
-        alpha=0.7
+        keywords
     )
 
     return matches[:20]
@@ -1492,6 +1513,7 @@ def retrieve_query_results_me(
 # ============================================================
 # AI RESPONSE
 # ============================================================
+
 
 async def generate_agent_response(
     user_query: str,
@@ -1575,6 +1597,7 @@ async def generate_agent_response(
 # UPLOAD ENDPOINT
 # ============================================================
 
+
 @app.post("/upload/")
 async def upload_files(
     files: List[UploadFile] = File(...)
@@ -1644,6 +1667,7 @@ async def upload_files(
 # QUERY ENDPOINT
 # ============================================================
 
+
 @app.post("/query/")
 async def query_pdf(
     req: QueryRequest
@@ -1676,13 +1700,13 @@ async def query_pdf(
             )
 
         max_score = max(
-            match["hybrid_score"]
+            match["rrf_score"]
             for match in matches
         ) or 1e-6
 
         for match in matches:
             match["norm_score"] = (
-                match["hybrid_score"]
+                match["rrf_score"]
                 / max_score
             )
 
@@ -1764,6 +1788,7 @@ async def query_pdf(
 # QUERY SPECIFIC PDFs
 # ============================================================
 
+
 @app.post("/queryme/")
 async def query_pdf_with_filter(
     req: QueryMeRequest
@@ -1795,13 +1820,13 @@ async def query_pdf_with_filter(
             )
 
         max_score = max(
-            match["hybrid_score"]
+            match["rrf_score"]
             for match in matches
         ) or 1e-6
 
         for match in matches:
             match["norm_score"] = (
-                match["hybrid_score"]
+                match["rrf_score"]
                 / max_score
             )
 
@@ -1874,11 +1899,13 @@ async def query_pdf_with_filter(
 # HEALTH CHECK
 # ============================================================
 
+
 @app.get("/")
 def hello():
     return {
         "message": "Hello, this is the PDF Query API!"
     }
+
 
 @app.head("/")
 def head_root():
