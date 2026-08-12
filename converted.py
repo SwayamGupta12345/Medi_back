@@ -773,6 +773,8 @@
 #     return Response(status_code=200)
 
 
+from google.api_core.exceptions import ResourceExhausted
+import time
 from fastapi import FastAPI, UploadFile, File, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -1140,6 +1142,66 @@ def sanitize_vector_id_title(title: str) -> str:
 # ============================================================
 
 
+# def chunk_and_embed(text: str, book_title: str, filename: str):
+#     if not text.strip():
+#         raise ValueError("PDF contains no extractable text")
+
+#     splitter = RecursiveCharacterTextSplitter(
+#         chunk_size=500,
+#         chunk_overlap=75
+#     )
+
+#     chunks = splitter.split_text(text)
+
+#     if not chunks:
+#         raise ValueError("No chunks generated from PDF")
+
+#     print(f"Generated {len(chunks)} chunks")
+
+#     vectors = embed_model.embed_documents(chunks)
+
+#     for i, vector in enumerate(vectors):
+#         if len(vector) != EMBEDDING_DIMENSION:
+#             raise ValueError(
+#                 f"Embedding dimension mismatch at chunk {i}: "
+#                 f"got {len(vector)}, expected {EMBEDDING_DIMENSION}"
+#             )
+
+#     safe_title = sanitize_vector_id_title(book_title)
+#     records = []
+
+#     for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+#         records.append({
+#             "id": f"{safe_title}-chunk-{i}",
+#             "values": vector,
+#             "metadata": {
+#                 "chunk_text": chunk,
+#                 "book_title": book_title,
+#                 "filename": filename,
+#                 "chunk_index": i,
+#                 "keywords": extract_keywords(chunk)
+#             }
+#         })
+
+#     return records
+
+# ============================================================
+# CHUNK + EMBED (rate-limited)
+# ============================================================
+
+
+def embed_with_backoff(texts: List[str], max_retries: int = 5):
+    for attempt in range(max_retries):
+        try:
+            return embed_model.embed_documents(texts)
+        except ResourceExhausted:
+            wait = 2 ** attempt  # 1, 2, 4, 8, 16 sec
+            print(f"Rate limited. Retrying in {wait}s (attempt {attempt+1})")
+            time.sleep(wait)
+    raise RuntimeError(
+        "Embedding failed after max retries due to rate limiting")
+
+
 def chunk_and_embed(text: str, book_title: str, filename: str):
     if not text.strip():
         raise ValueError("PDF contains no extractable text")
@@ -1156,7 +1218,17 @@ def chunk_and_embed(text: str, book_title: str, filename: str):
 
     print(f"Generated {len(chunks)} chunks")
 
-    vectors = embed_model.embed_documents(chunks)
+    BATCH_SIZE = 20        # keep well under 100/min per batch
+    SLEEP_BETWEEN_BATCHES = 2  # seconds
+
+    vectors = []
+    for i in range(0, len(chunks), BATCH_SIZE):
+        batch = chunks[i:i + BATCH_SIZE]
+        batch_vectors = embed_with_backoff(batch)
+        vectors.extend(batch_vectors)
+
+        if i + BATCH_SIZE < len(chunks):
+            time.sleep(SLEEP_BETWEEN_BATCHES)
 
     for i, vector in enumerate(vectors):
         if len(vector) != EMBEDDING_DIMENSION:
