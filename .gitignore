@@ -2,3 +2,11 @@
 ./project
 .python-version
 pyproject.toml
+__pychache__/
+venv/
+letsMakeEmbeddings.py
+main.py
+neo4j_verify.py
+text_breaking.py
+runtime.txt
+data/
